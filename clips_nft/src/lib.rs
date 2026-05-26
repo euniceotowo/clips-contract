@@ -1728,6 +1728,15 @@ impl ClipsNftContract {
             .unwrap_or(false)
     }
 
+    /// Returns the accrued royalty balance for `token_id`.
+    /// Returns `0` if no royalties are queued or the token does not exist.
+    pub fn royalty_balance_of(env: Env, token_id: TokenId) -> i128 {
+        env.storage()
+            .persistent()
+            .get(&DataKey::RoyaltyBalance(token_id))
+            .unwrap_or(0)
+    }
+
     /// Returns the average gas cost for mint operations.
     /// Returns 0 if no mints have been performed.
     pub fn average_gas_mint(env: Env) -> u64 {
