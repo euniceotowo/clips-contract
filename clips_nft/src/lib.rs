@@ -492,16 +492,27 @@ pub struct AdminChangedEvent {
 /// Emerging Soroban NFT standard interface (ERC-721 adapted).
 /// Documents the expected API surface for marketplace interoperability.
 pub trait NftStandard {
+    /// Returns how many tokens `owner` holds.
     fn balance_of(env: Env, owner: Address) -> u32;
+    /// Returns the owner of `token_id`.
     fn owner_of(env: Env, token_id: TokenId) -> Result<Address, Error>;
+    /// Transfers `token_id` from `from` to `to`.
     fn transfer(env: Env, from: Address, to: Address, token_id: TokenId) -> Result<(), Error>;
+    /// Approves `operator` to manage `token_id` (or clears approval when `None`).
     fn approve(env: Env, caller: Address, operator: Option<Address>, token_id: TokenId) -> Result<(), Error>;
+    /// Returns the per-token approved operator, if any.
     fn get_approved(env: Env, token_id: TokenId) -> Option<Address>;
+    /// Grants or revokes operator rights for all tokens owned by `caller`.
     fn set_approval_for_all(env: Env, caller: Address, operator: Address, approved: bool) -> Result<(), Error>;
+    /// Returns whether `operator` may manage all tokens for `owner`.
     fn is_approved_for_all(env: Env, owner: Address, operator: Address) -> bool;
+    /// Returns the number of minted tokens.
     fn total_supply(env: Env) -> u32;
+    /// Returns the metadata URI for `token_id`.
     fn token_uri(env: Env, token_id: TokenId) -> Result<String, Error>;
+    /// Returns the collection name.
     fn name(env: Env) -> String;
+    /// Returns the collection symbol.
     fn symbol(env: Env) -> String;
 }
 
@@ -765,6 +776,11 @@ impl ClipsNftContract {
         Ok(())
     }
 
+    /// Freeze an NFT so transfers and burns are blocked until unfrozen.
+    ///
+    /// ⚠️ **Access Control: Admin only.**
+    ///
+    /// Emits: `"freeze"` [`TokenFrozenEvent`].
     pub fn freeze(env: Env, admin: Address, token_id: TokenId) -> Result<(), Error> {
         Self::require_admin(&env, &admin)?;
         if !Self::exists(env.clone(), token_id) {
@@ -2485,6 +2501,7 @@ impl ClipsNftContract {
     // Internal helpers
     // -------------------------------------------------------------------------
 
+    /// Rejects minting when `wallet` is still inside the configured cooldown window.
     fn enforce_mint_cooldown(env: &Env, wallet: &Address) -> Result<(), Error> {
         let cooldown = Self::get_mint_cooldown(env.clone());
         if cooldown == 0 {
@@ -2500,6 +2517,7 @@ impl ClipsNftContract {
         Ok(())
     }
 
+    /// Persists the ledger timestamp of the latest successful mint for `wallet`.
     fn record_mint_timestamp(env: &Env, wallet: &Address) {
         env.storage()
             .persistent()
@@ -2516,6 +2534,7 @@ impl ClipsNftContract {
         Ok(data)
     }
 
+    /// Returns the token ID minted for `clip_id`, if any, bumping TTL when present.
     fn load_clip_token_id(env: &Env, clip_id: u32) -> Option<TokenId> {
         let key = DataKey::ClipIdMinted(clip_id);
         let token_id: Option<TokenId> = env.storage().persistent().get(&key);
@@ -2525,6 +2544,7 @@ impl ClipsNftContract {
         token_id
     }
 
+    /// Extends persistent entry TTL to reduce archive risk on hot keys.
     fn bump_persistent_ttl(env: &Env, key: &DataKey) {
         env.storage()
             .persistent()
