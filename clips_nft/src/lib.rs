@@ -263,7 +263,7 @@ pub enum DataKey {
     Balance(Address),
     /// Current total supply of tokens (instance).
     TotalSupply,
-    /// Gas tracking fields (instance)
+    /// Gas tracking fields (temporary — metrics only, not critical state)
     TotalGasMint,
     CountMint,
     TotalGasTransfer,
@@ -982,10 +982,10 @@ impl ClipsNftContract {
         );
 
         // Gas tracking — Closes #169
-        let count_mint: u64 = env.storage().instance().get(&DataKey::CountMint).unwrap_or(0);
-        env.storage().instance().set(&DataKey::CountMint, &(count_mint + 1));
-        let total_gas_mint: u64 = env.storage().instance().get(&DataKey::TotalGasMint).unwrap_or(0);
-        env.storage().instance().set(&DataKey::TotalGasMint, &total_gas_mint.saturating_add(GAS_BASE_MINT));
+        let count_mint: u64 = env.storage().temporary().get(&DataKey::CountMint).unwrap_or(0);
+        env.storage().temporary().set(&DataKey::CountMint, &(count_mint + 1));
+        let total_gas_mint: u64 = env.storage().temporary().get(&DataKey::TotalGasMint).unwrap_or(0);
+        env.storage().temporary().set(&DataKey::TotalGasMint, &total_gas_mint.saturating_add(GAS_BASE_MINT));
         Self::record_mint_timestamp(&env, &to);
 
         Ok(token_id)
@@ -1144,10 +1144,10 @@ impl ClipsNftContract {
         );
 
         // Gas tracking — Closes #169
-        let count_transfer: u64 = env.storage().instance().get(&DataKey::CountTransfer).unwrap_or(0);
-        env.storage().instance().set(&DataKey::CountTransfer, &(count_transfer + 1));
-        let total_gas_transfer: u64 = env.storage().instance().get(&DataKey::TotalGasTransfer).unwrap_or(0);
-        env.storage().instance().set(&DataKey::TotalGasTransfer, &total_gas_transfer.saturating_add(GAS_BASE_TRANSFER));
+        let count_transfer: u64 = env.storage().temporary().get(&DataKey::CountTransfer).unwrap_or(0);
+        env.storage().temporary().set(&DataKey::CountTransfer, &(count_transfer + 1));
+        let total_gas_transfer: u64 = env.storage().temporary().get(&DataKey::TotalGasTransfer).unwrap_or(0);
+        env.storage().temporary().set(&DataKey::TotalGasTransfer, &total_gas_transfer.saturating_add(GAS_BASE_TRANSFER));
 
         Ok(())
     }
@@ -1226,10 +1226,10 @@ impl ClipsNftContract {
         );
 
         // Gas tracking — Closes #169
-        let count_transfer: u64 = env.storage().instance().get(&DataKey::CountTransfer).unwrap_or(0);
-        env.storage().instance().set(&DataKey::CountTransfer, &(count_transfer + 1));
-        let total_gas_transfer: u64 = env.storage().instance().get(&DataKey::TotalGasTransfer).unwrap_or(0);
-        env.storage().instance().set(&DataKey::TotalGasTransfer, &total_gas_transfer.saturating_add(GAS_BASE_TRANSFER));
+        let count_transfer: u64 = env.storage().temporary().get(&DataKey::CountTransfer).unwrap_or(0);
+        env.storage().temporary().set(&DataKey::CountTransfer, &(count_transfer + 1));
+        let total_gas_transfer: u64 = env.storage().temporary().get(&DataKey::TotalGasTransfer).unwrap_or(0);
+        env.storage().temporary().set(&DataKey::TotalGasTransfer, &total_gas_transfer.saturating_add(GAS_BASE_TRANSFER));
 
         Ok(())
     }
@@ -1733,12 +1733,12 @@ impl ClipsNftContract {
     pub fn average_gas_mint(env: Env) -> u64 {
         let total_gas: u64 = env
             .storage()
-            .instance()
+            .temporary()
             .get(&DataKey::TotalGasMint)
             .unwrap_or(0);
         let count: u64 = env
             .storage()
-            .instance()
+            .temporary()
             .get(&DataKey::CountMint)
             .unwrap_or(0);
         
@@ -1754,12 +1754,12 @@ impl ClipsNftContract {
     pub fn average_gas_transfer(env: Env) -> u64 {
         let total_gas: u64 = env
             .storage()
-            .instance()
+            .temporary()
             .get(&DataKey::TotalGasTransfer)
             .unwrap_or(0);
         let count: u64 = env
             .storage()
-            .instance()
+            .temporary()
             .get(&DataKey::CountTransfer)
             .unwrap_or(0);
         
@@ -1773,7 +1773,7 @@ impl ClipsNftContract {
     /// Returns the total number of mint operations performed.
     pub fn total_mints(env: Env) -> u64 {
         env.storage()
-            .instance()
+            .temporary()
             .get(&DataKey::CountMint)
             .unwrap_or(0)
     }
@@ -1781,7 +1781,7 @@ impl ClipsNftContract {
     /// Returns the total number of transfer operations performed.
     pub fn total_transfers(env: Env) -> u64 {
         env.storage()
-            .instance()
+            .temporary()
             .get(&DataKey::CountTransfer)
             .unwrap_or(0)
     }
@@ -2498,10 +2498,10 @@ impl ClipsNftContract {
         );
 
         // Gas tracking — Closes #169
-        let count_mint: u64 = env.storage().instance().get(&DataKey::CountMint).unwrap_or(0);
-        env.storage().instance().set(&DataKey::CountMint, &(count_mint + n as u64));
-        let total_gas_mint: u64 = env.storage().instance().get(&DataKey::TotalGasMint).unwrap_or(0);
-        env.storage().instance().set(&DataKey::TotalGasMint, &total_gas_mint.saturating_add(GAS_BASE_MINT.saturating_mul(n as u64)));
+        let count_mint: u64 = env.storage().temporary().get(&DataKey::CountMint).unwrap_or(0);
+        env.storage().temporary().set(&DataKey::CountMint, &(count_mint + n as u64));
+        let total_gas_mint: u64 = env.storage().temporary().get(&DataKey::TotalGasMint).unwrap_or(0);
+        env.storage().temporary().set(&DataKey::TotalGasMint, &total_gas_mint.saturating_add(GAS_BASE_MINT.saturating_mul(n as u64)));
         Self::record_mint_timestamp(&env, &to);
 
         Ok(minted)
