@@ -38,7 +38,7 @@
                   "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM"
                 },
                 {
-                  "bytes": "3da67d41e080c6dc347a70e3bdc5e7a0cdb463884e82ea1b99c1cf2a8ee515ba"
+                  "bytes": "09a86fe3c895413e17e690c0c1bbdcc5c42ddc16f9ec9ae2360f418bcfcd0ff7"
                 }
               ]
             }
@@ -110,7 +110,7 @@
                   "bool": false
                 },
                 {
-                  "bytes": "cd79c788b8fd444e3452ab11495c108e70787c28f132d08034394d00c69a8b391feaefdeaad66b70df5326d33eb41d3aa29af285390db2b8ac78876702b7d50c"
+                  "bytes": "1d348b2fa74a9db8858853a12f832dc58e051e386facdcf524d1cc944554c6c04bc419642d830bfcbc3b7590c870d93a3b6a881362f967b634312e722a9a290e"
                 }
               ]
             }
@@ -299,16 +299,16 @@
               "key": {
                 "vec": [
                   {
-                    "symbol": "LastMintTimestamp"
+                    "symbol": "CustomTokenUri"
                   },
                   {
-                    "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4"
+                    "u32": 1
                   }
                 ]
               },
               "durability": "persistent",
               "val": {
-                "u64": "0"
+                "string": "ipfs://QmNewURI"
               }
             }
           },
@@ -326,16 +326,16 @@
               "key": {
                 "vec": [
                   {
-                    "symbol": "MetadataUpdateCount"
+                    "symbol": "LastMintTimestamp"
                   },
                   {
-                    "u32": 1
+                    "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4"
                   }
                 ]
               },
               "durability": "persistent",
               "val": {
-                "u32": 1
+                "u64": "0"
               }
             }
           },
@@ -416,7 +416,7 @@
                       "symbol": "metadata_uri"
                     },
                     "val": {
-                      "string": "ipfs://QmNewURI"
+                      "string": "ipfs://QmExample"
                     }
                   },
                   {
@@ -667,7 +667,7 @@
                         ]
                       },
                       "val": {
-                        "bytes": "3da67d41e080c6dc347a70e3bdc5e7a0cdb463884e82ea1b99c1cf2a8ee515ba"
+                        "bytes": "09a86fe3c895413e17e690c0c1bbdcc5c42ddc16f9ec9ae2360f418bcfcd0ff7"
                       }
                     },
                     {
@@ -741,7 +741,7 @@
           "v0": {
             "topics": [
               {
-                "symbol": "meta_upd"
+                "symbol": "uri_chg"
               }
             ],
             "data": {
@@ -756,10 +756,10 @@
                 },
                 {
                   "key": {
-                    "symbol": "old_uri"
+                    "symbol": "owner"
                   },
                   "val": {
-                    "string": "ipfs://QmExample"
+                    "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4"
                   }
                 },
                 {

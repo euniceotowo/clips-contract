@@ -38,7 +38,7 @@
                   "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM"
                 },
                 {
-                  "bytes": "e8c43e6dc67a94a44f368a4017e9dbad6881e9f9dc75de40641ebfc4ddf99d4e"
+                  "bytes": "41917255d8c06c7365dff7e6aa2cbd4e99bf01da18d61892563639de9bb20e74"
                 }
               ]
             }
@@ -110,7 +110,7 @@
                   "bool": false
                 },
                 {
-                  "bytes": "61a5c1833f88995733055e9c30c7a24368cd07c66906125c36eb1925cef2b9e0446cbc2c039312b0651df2c233e197050e4064c31757dec0dffc1d4039ea890d"
+                  "bytes": "c9c1b8d04b1a44994f481482a669d35caf35d76005471ef209eee23064ea19551ffd21b5a600ad8ef0a99b15495a1024f4c16341690d7942623703cc8ba2b20a"
                 }
               ]
             }
@@ -301,16 +301,16 @@
               "key": {
                 "vec": [
                   {
-                    "symbol": "LastMintTimestamp"
+                    "symbol": "CustomTokenUri"
                   },
                   {
-                    "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4"
+                    "u32": 1
                   }
                 ]
               },
               "durability": "persistent",
               "val": {
-                "u64": "0"
+                "string": "ipfs://QmCustomOverride"
               }
             }
           },
@@ -328,16 +328,16 @@
               "key": {
                 "vec": [
                   {
-                    "symbol": "MetadataUpdateCount"
+                    "symbol": "LastMintTimestamp"
                   },
                   {
-                    "u32": 1
+                    "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4"
                   }
                 ]
               },
               "durability": "persistent",
               "val": {
-                "u32": 1
+                "u64": "0"
               }
             }
           },
@@ -418,7 +418,7 @@
                       "symbol": "metadata_uri"
                     },
                     "val": {
-                      "string": "ipfs://QmCustomOverride"
+                      "string": "ipfs://QmExample"
                     }
                   },
                   {
@@ -669,7 +669,7 @@
                         ]
                       },
                       "val": {
-                        "bytes": "e8c43e6dc67a94a44f368a4017e9dbad6881e9f9dc75de40641ebfc4ddf99d4e"
+                        "bytes": "41917255d8c06c7365dff7e6aa2cbd4e99bf01da18d61892563639de9bb20e74"
                       }
                     },
                     {

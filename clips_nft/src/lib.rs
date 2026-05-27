@@ -1155,6 +1155,63 @@ impl ClipsNftContract {
         Ok(())
     }
 
+    /// Grant or revoke operator rights for **all** tokens owned by `owner`.
+    ///
+    /// When `approved` is `true`, `operator` may transfer or approve any token
+    /// owned by `owner`. When `false`, that permission is revoked.
+    ///
+    /// Emits: `"app_all"` [`ApprovalForAllEvent`].
+    ///
+    /// # Arguments
+    /// * `owner`    — Token owner granting/revoking the approval (must authorize).
+    /// * `operator` — Address being approved or revoked.
+    /// * `approved` — `true` to grant, `false` to revoke.
+    ///
+    /// # Errors
+    /// * [`Error::ContractPaused`] — contract is paused.
+    pub fn set_approval_for_all(
+        env: Env,
+        owner: Address,
+        operator: Address,
+        approved: bool,
+    ) -> Result<(), Error> {
+        owner.require_auth();
+        Self::require_not_paused(&env)?;
+
+        let key = DataKey::ApprovalForAll(owner.clone(), operator.clone());
+        if approved {
+            env.storage().persistent().set(&key, &true);
+        } else {
+            env.storage().persistent().remove(&key);
+        }
+
+        env.events().publish(
+            (symbol_short!("app_all"),),
+            ApprovalForAllEvent { owner, operator, approved },
+        );
+        Ok(())
+    }
+
+    /// Returns `true` if `operator` is approved to manage all tokens of `owner`.
+    pub fn is_approved_for_all(env: Env, owner: Address, operator: Address) -> bool {
+        env.storage()
+            .persistent()
+            .get::<DataKey, bool>(&DataKey::ApprovalForAll(owner, operator))
+            .unwrap_or(false)
+    }
+
+    /// Returns the approved operator for `token_id`, or `None` if none is set.
+    ///
+    /// # Errors
+    /// * [`Error::InvalidTokenId`] — token does not exist.
+    pub fn get_approved(env: Env, token_id: TokenId) -> Result<Option<Address>, Error> {
+        // Verify the token exists.
+        if !env.storage().persistent().has(&DataKey::Token(token_id)) {
+            return Err(Error::InvalidTokenId);
+        }
+        Ok(env.storage().persistent().get(&DataKey::Approved(token_id)))
+    }
+
     // -------------------------------------------------------------------------
     // Core NFT operations
     // -------------------------------------------------------------------------
@@ -1523,6 +1580,90 @@ impl ClipsNftContract {
     // Limited metadata update (owner-only, once per NFT)
     // -------------------------------------------------------------------------
 
+    /// Returns `true` if the token exists (public view).
+    pub fn exists(env: Env, token_id: TokenId) -> bool {
+        env.storage().persistent().has(&DataKey::Token(token_id))
+    }
+
+    /// Set the collection name. Admin only.
+    pub fn set_name(env: Env, admin: Address, name: String) -> Result<(), Error> {
+        Self::require_admin(&env, &admin)?;
+        env.storage().instance().set(&DataKey::Name, &name);
+        env.events().publish(
+            (symbol_short!("col_upd"),),
+            CollectionUpdatedEvent { field: String::from_str(&env, "name"), new_value: name },
+        );
+        Ok(())
+    }
+
+    /// Set the collection symbol. Admin only.
+    pub fn set_symbol(env: Env, admin: Address, symbol: String) -> Result<(), Error> {
+        Self::require_admin(&env, &admin)?;
+        env.storage().instance().set(&DataKey::Symbol, &symbol);
+        env.events().publish(
+            (symbol_short!("col_upd"),),
+            CollectionUpdatedEvent { field: String::from_str(&env, "symbol"), new_value: symbol },
+        );
+        Ok(())
+    }
+
+    /// Set a custom token URI override. Only the current owner may call this.
+    pub fn set_token_uri(env: Env, owner: Address, token_id: TokenId, uri: String) -> Result<(), Error> {
+        owner.require_auth();
+        let data = Self::load_token(&env, token_id)?;
+        if owner != data.owner {
+            return Err(Error::Unauthorized);
+        }
+        Self::validate_url(&env, &Some(uri.clone()), Error::InvalidImageUrl)?;
+        env.storage().persistent().set(&DataKey::CustomTokenUri(token_id), &uri.clone());
+        env.events().publish(
+            (symbol_short!("uri_chg"),),
+            TokenUriChangedEvent { token_id, owner, new_uri: uri },
+        );
+        Ok(())
+    }
+
+    /// Set the mint cooldown in seconds. Admin only.
+    pub fn set_mint_cooldown(env: Env, admin: Address, seconds: u64) -> Result<(), Error> {
+        Self::require_admin(&env, &admin)?;
+        env.storage().instance().set(&DataKey::MintCooldownSeconds, &seconds);
+        Ok(())
+    }
+
+    /// Get the configured mint cooldown in seconds.
+    pub fn get_mint_cooldown(env: Env) -> u64 {
+        Self::get_mint_cooldown_seconds(env)
+    }
+
+    /// Enable or disable the circuit breaker. Admin only.
+    pub fn set_circuit_breaker_enabled(env: Env, admin: Address, enabled: bool) -> Result<(), Error> {
+        Self::require_admin(&env, &admin)?;
+        env.storage().instance().set(&DataKey::CircuitBreakerEnabled, &enabled);
+        Ok(())
+    }
+
+    /// Set the circuit breaker mint threshold. Admin only.
+    pub fn set_circuit_breaker_threshold(env: Env, admin: Address, threshold: u64) -> Result<(), Error> {
+        Self::require_admin(&env, &admin)?;
+        env.storage().instance().set(&DataKey::CircuitBreakerThreshold, &threshold);
+        Ok(())
+    }
+
+    /// Set the circuit breaker time window in seconds. Admin only.
+    pub fn set_circuit_breaker_window(env: Env, admin: Address, window_seconds: u64) -> Result<(), Error> {
+        Self::require_admin(&env, &admin)?;
+        env.storage().instance().set(&DataKey::CircuitBreakerWindowSeconds, &window_seconds);
+        Ok(())
+    }
+
+    /// Reset the circuit breaker counters. Admin only.
+    pub fn reset_circuit_breaker(env: Env, admin: Address) -> Result<(), Error> {
+        Self::require_admin(&env, &admin)?;
+        env.storage().instance().set(&DataKey::CircuitBreakerWindowStart, &0u64);
+        env.storage().instance().set(&DataKey::CircuitBreakerWindowCount, &0u64);
+        Ok(())
+    }
+
     /// Update the metadata URI for a token. Only the current owner may call
     /// this, and each token may only be updated **once** after minting.
     ///
@@ -1660,12 +1801,20 @@ impl ClipsNftContract {
     /// # Errors
     /// * [`Error::InvalidTokenId`] — token does not exist.
     pub fn token_uri(env: Env, token_id: TokenId) -> Result<String, Error> {
+        // Return custom URI override if set, otherwise fall back to TokenData.
+        if let Some(uri) = env.storage().persistent().get::<DataKey, String>(&DataKey::CustomTokenUri(token_id)) {
+            // Verify token exists.
+            if !env.storage().persistent().has(&DataKey::Token(token_id)) {
+                return Err(Error::InvalidTokenId);
+            }
+            return Ok(uri);
+        }
         Ok(Self::load_token(&env, token_id)?.metadata_uri)
     }
 
     /// Alias for [`token_uri`], kept for backwards compatibility.
     pub fn get_metadata(env: Env, token_id: TokenId) -> Result<String, Error> {
-        Ok(Self::load_token(&env, token_id)?.metadata_uri)
+        Self::token_uri(env, token_id)
     }
 
     /// Returns OpenSea-compatible JSON metadata for a given token ID.
@@ -2866,7 +3015,7 @@ impl ClipsNftContract {
 
     /// Rejects minting when `wallet` is still inside the configured cooldown window.
     fn enforce_mint_cooldown(env: &Env, wallet: &Address) -> Result<(), Error> {
-        let cooldown = Self::get_mint_cooldown(env.clone());
+        let cooldown = Self::get_mint_cooldown_seconds(env.clone());
         if cooldown == 0 {
             return Ok(());
         }
@@ -2914,11 +3063,6 @@ impl ClipsNftContract {
             .extend_ttl(key, PERSISTENT_BUMP_THRESHOLD, PERSISTENT_BUMP_AMOUNT);
     }
 
-    /// Returns `true` if the token exists.
-    fn exists(env: Env, token_id: TokenId) -> bool {
-        env.storage().persistent().has(&DataKey::Token(token_id))
-    }
-
     /// Returns the platform fee in basis points (default 100 = 1%).
     fn get_platform_fee(env: Env) -> u32 {
         env.storage()
@@ -2928,7 +3072,7 @@ impl ClipsNftContract {
     }
 
     /// Returns the configured mint cooldown in seconds (default 0 = no cooldown).
-    fn get_mint_cooldown(env: Env) -> u64 {
+    fn get_mint_cooldown_seconds(env: Env) -> u64 {
         env.storage()
             .instance()
             .get(&DataKey::MintCooldownSeconds)
@@ -4987,5 +5131,123 @@ mod tests {
 
         let events = env.events().all();
         assert!(events.events().len() > 0);
+    }
+
+    // -------------------------------------------------------------------------
+    // Approval mechanism tests
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn test_approve_and_get_approved() {
+        let (env, admin, user1, user2) = setup();
+        let contract_id = env.register(ClipsNftContract, ());
+        let client = ClipsNftContractClient::new(&env, &contract_id);
+        client.init(&admin);
+        let kp = register_signer(&env, &client, &admin);
+
+        let token_id = do_mint(&client, &env, &user1, 10_000, &kp);
+
+        // No approval set yet.
+        assert_eq!(client.get_approved(&token_id), None);
+
+        // Owner approves user2.
+        client.approve(&user1, &Some(user2.clone()), &token_id);
+        assert_eq!(client.get_approved(&token_id), Some(user2.clone()));
+
+        // Clearing approval (None) removes it.
+        client.approve(&user1, &None, &token_id);
+        assert_eq!(client.get_approved(&token_id), None);
+    }
+
+    #[test]
+    fn test_approve_non_owner_fails() {
+        let (env, admin, user1, user2) = setup();
+        let contract_id = env.register(ClipsNftContract, ());
+        let client = ClipsNftContractClient::new(&env, &contract_id);
+        client.init(&admin);
+        let kp = register_signer(&env, &client, &admin);
+
+        let token_id = do_mint(&client, &env, &user1, 10_001, &kp);
+
+        let result = client.try_approve(&user2, &Some(user2.clone()), &token_id);
+        assert_eq!(result, Err(Ok(Error::NotAuthorizedToApprove)));
+    }
+
+    #[test]
+    fn test_get_approved_invalid_token_fails() {
+        let (env, admin, _, _) = setup();
+        let contract_id = env.register(ClipsNftContract, ());
+        let client = ClipsNftContractClient::new(&env, &contract_id);
+        client.init(&admin);
+
+        let result = client.try_get_approved(&9999u32);
+        assert_eq!(result, Err(Ok(Error::InvalidTokenId)));
+    }
+
+    #[test]
+    fn test_set_approval_for_all_and_query() {
+        let (env, admin, user1, user2) = setup();
+        let contract_id = env.register(ClipsNftContract, ());
+        let client = ClipsNftContractClient::new(&env, &contract_id);
+        client.init(&admin);
+
+        assert!(!client.is_approved_for_all(&user1, &user2));
+
+        client.set_approval_for_all(&user1, &user2, &true);
+        assert!(client.is_approved_for_all(&user1, &user2));
+
+        client.set_approval_for_all(&user1, &user2, &false);
+        assert!(!client.is_approved_for_all(&user1, &user2));
+    }
+
+    #[test]
+    fn test_set_approval_for_all_emits_event() {
+        let (env, admin, user1, user2) = setup();
+        let contract_id = env.register(ClipsNftContract, ());
+        let client = ClipsNftContractClient::new(&env, &contract_id);
+        client.init(&admin);
+
+        client.set_approval_for_all(&user1, &user2, &true);
+
+        let events = env.events().all();
+        assert!(events.events().len() > 0);
+    }
+
+    #[test]
+    fn test_operator_can_approve_via_approval_for_all() {
+        let (env, admin, user1, user2) = setup();
+        let contract_id = env.register(ClipsNftContract, ());
+        let client = ClipsNftContractClient::new(&env, &contract_id);
+        client.init(&admin);
+        let kp = register_signer(&env, &client, &admin);
+
+        let token_id = do_mint(&client, &env, &user1, 10_002, &kp);
+        let user3 = Address::generate(&env);
+
+        // user1 grants user2 operator rights for all tokens.
+        client.set_approval_for_all(&user1, &user2, &true);
+
+        // user2 (operator) can now approve user3 for a specific token.
+        client.approve(&user2, &Some(user3.clone()), &token_id);
+        assert_eq!(client.get_approved(&token_id), Some(user3));
+    }
+
+    #[test]
+    fn test_approval_cleared_on_transfer() {
+        let (env, admin, user1, user2) = setup();
+        let contract_id = env.register(ClipsNftContract, ());
+        let client = ClipsNftContractClient::new(&env, &contract_id);
+        client.init(&admin);
+        let kp = register_signer(&env, &client, &admin);
+
+        let token_id = do_mint(&client, &env, &user1, 10_003, &kp);
+        let user3 = Address::generate(&env);
+
+        client.approve(&user1, &Some(user3.clone()), &token_id);
+        assert_eq!(client.get_approved(&token_id), Some(user3));
+
+        // Transfer clears the per-token approval.
+        client.transfer(&user1, &user2, &token_id, &0, &None);
+        assert_eq!(client.get_approved(&token_id), None);
     }
 }
