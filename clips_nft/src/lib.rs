@@ -297,6 +297,8 @@ pub enum DataKey {
     ApprovalForAll(Address, Address),
     /// Blacklist flag for a clip_id (persistent).
     BlacklistedClip(u32),
+    /// Used signature payload hash to prevent replay attacks (persistent).
+    UsedSignature(BytesN<32>),
     /// Pending XLM withdrawal request (instance storage)
     WithdrawXlmRequest,
     /// Timestamp of the last successfully executed withdrawal (instance storage)
@@ -1106,6 +1108,120 @@ impl ClipsNftContract {
         Self::record_mint_timestamp(&env, &to);
 
         // Update circuit breaker counter after successful mint
+        Self::update_circuit_breaker_counter(&env, 1);
+
+        Ok(token_id)
+    }
+
+    /// Mint using a backend-provided signature instead of a wallet-signed tx.
+    ///
+    /// This entrypoint does NOT require the recipient to `require_auth()`.
+    /// The backend signature must include a nonce to prevent replay attacks.
+    pub fn mint_with_signature(
+        env: Env,
+        to: Address,
+        clip_id: u32,
+        metadata_uri: String,
+        image: Option<String>,
+        animation_url: Option<String>,
+        royalty: Royalty,
+        is_soulbound: bool,
+        signature: BytesN<64>,
+        nonce: u64,
+    ) -> Result<TokenId, Error> {
+        // No `to.require_auth()` — caller may be any relayer.
+        Self::require_not_paused(&env)?;
+        Self::check_circuit_breaker(&env, 1)?;
+
+        // Validate URLs before state changes.
+        Self::validate_url(&env, &image, Error::InvalidImageUrl)?;
+        Self::validate_url(&env, &animation_url, Error::InvalidAnimationUrl)?;
+
+        // Verify backend signature and obtain message hash.
+        let message_hash = Self::verify_clip_signature_with_nonce(&env, &to, clip_id, &metadata_uri, nonce, &signature)?;
+
+        // Dedup check — one persistent read.
+        if Self::load_clip_token_id(&env, clip_id).is_some() {
+            return Err(Error::ClipAlreadyMinted);
+        }
+
+        if env
+            .storage()
+            .persistent()
+            .get(&DataKey::BlacklistedClip(clip_id))
+            .unwrap_or(false)
+        {
+            return Err(Error::ClipBlacklisted);
+        }
+
+        let royalty = Self::normalize_royalty(&env, royalty)?;
+
+        let token_id: TokenId = env
+            .storage()
+            .instance()
+            .get(&DataKey::NextTokenId)
+            .unwrap_or(1);
+
+        // 4 persistent writes
+        env.storage().persistent().set(
+            &DataKey::Token(token_id),
+            &TokenData {
+                owner: to.clone(),
+                clip_id,
+                is_soulbound,
+                metadata_uri: metadata_uri.clone(),
+                image: image.clone(),
+                animation_url: animation_url.clone(),
+                description: None,
+                external_url: None,
+                attributes: Vec::new(&env),
+                royalty,
+            },
+        );
+        Self::bump_persistent_ttl(&env, &DataKey::Token(token_id));
+        env.storage()
+            .persistent()
+            .set(&DataKey::ClipIdMinted(clip_id), &token_id);
+        Self::bump_persistent_ttl(&env, &DataKey::ClipIdMinted(clip_id));
+
+        // 1 instance write.
+        env.storage()
+            .instance()
+            .set(&DataKey::NextTokenId, &(token_id + 1));
+
+        // Update total supply
+        let total_supply: u32 = env.storage().instance().get(&DataKey::TotalSupply).unwrap_or(0);
+        env.storage().instance().set(&DataKey::TotalSupply, &(total_supply + 1));
+
+        // Update balance
+        let balance: u32 = env.storage().persistent().get(&DataKey::Balance(to.clone())).unwrap_or(0);
+        env.storage().persistent().set(&DataKey::Balance(to.clone()), &(balance + 1));
+
+        // Mark signature message hash as used to prevent replay.
+        Self::mark_signature_used(&env, &message_hash);
+
+        env.events().publish(
+            (symbol_short!("mint"),),
+            MintEvent { to: to.clone(), clip_id, token_id, metadata_uri },
+        );
+
+        env.events().publish(
+            (symbol_short!("transfer"),),
+            TransferEvent {
+                token_id,
+                from: env.current_contract_address(),
+                to: to.clone(),
+            },
+        );
+
+        // Gas tracking
+        let count_mint: u64 = env.storage().instance().get(&DataKey::CountMint).unwrap_or(0);
+        env.storage().instance().set(&DataKey::CountMint, &(count_mint + 1));
+        let total_gas_mint: u64 = env.storage().instance().get(&DataKey::TotalGasMint).unwrap_or(0);
+        env.storage().instance().set(&DataKey::TotalGasMint, &total_gas_mint.saturating_add(GAS_BASE_MINT));
+        Self::record_mint_timestamp(&env, &to);
+
+        // Update circuit breaker
         Self::update_circuit_breaker_counter(&env, 1);
 
         Ok(token_id)
@@ -3174,6 +3290,63 @@ impl ClipsNftContract {
             .ed25519_verify(&signer, &Bytes::from(message), signature);
 
         Ok(())
+    }
+
+    /// Verify a backend Ed25519 signature over the canonical mint payload
+    /// which includes a nonce to prevent replay attacks.
+    ///
+    /// Payload:
+    /// ```text
+    /// owner_hash = SHA-256(XDR(owner))
+    /// uri_hash   = SHA-256(UTF-8(metadata_uri))
+    /// message    = SHA-256( "mint" || clip_id_le4 || owner_hash || uri_hash || nonce_le8 )
+    /// ```
+    fn verify_clip_signature_with_nonce(
+        env: &Env,
+        owner: &Address,
+        clip_id: u32,
+        metadata_uri: &String,
+        nonce: u64,
+        signature: &BytesN<64>,
+    ) -> Result<BytesN<32>, Error> {
+        let signer: BytesN<32> = env
+            .storage()
+            .instance()
+            .get(&DataKey::Signer)
+            .ok_or(Error::SignerNotSet)?;
+
+        let owner_hash: BytesN<32> = env.crypto().sha256(&owner.clone().to_xdr(env)).into();
+        let uri_hash: BytesN<32> = env.crypto().sha256(&Bytes::from(metadata_uri.to_xdr(env))).into();
+
+        let mut preimage = Bytes::new(env);
+        preimage.append(&Bytes::from_slice(env, b"mint"));
+        preimage.extend_from_array(&clip_id.to_le_bytes());
+        preimage.append(&Bytes::from(owner_hash));
+        preimage.append(&Bytes::from(uri_hash));
+        preimage.extend_from_array(&nonce.to_le_bytes());
+
+        let message: BytesN<32> = env.crypto().sha256(&preimage).into();
+
+        // Prevent replay: ensure message hash hasn't been used
+        if env
+            .storage()
+            .persistent()
+            .has(&DataKey::UsedSignature(message.clone()))
+        {
+            return Err(Error::InvalidSignature);
+        }
+
+        env.crypto()
+            .ed25519_verify(&signer, &Bytes::from(message.clone()), signature);
+
+        Ok(message)
+    }
+
+    /// Mark a signature message hash as used to prevent replay.
+    fn mark_signature_used(env: &Env, message: &BytesN<32>) {
+        env.storage()
+            .persistent()
+            .set(&DataKey::UsedSignature(message.clone()), &true);
     }
 
     /// Assert that `addr` is the stored admin and require its authorization.
