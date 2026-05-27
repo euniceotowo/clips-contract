@@ -5,8 +5,9 @@ mod test_helpers;
 use clips_nft::{ClipsNftContract, ClipsNftContractClient, Royalty, RoyaltyRecipient};
 use soroban_sdk::{
     testutils::{Address as _, BytesN as _, Ledger as _},
-    Address, Bytes, BytesN, Env, String, Vec, xdr::ToXdr,
     token,
+    xdr::ToXdr,
+    Address, Bytes, BytesN, Env, String, Vec,
 };
 
 /// Mock Backend Simulation
@@ -41,7 +42,10 @@ impl MockBackend {
         metadata_uri: &String,
     ) -> BytesN<64> {
         let owner_hash: BytesN<32> = env.crypto().sha256(&owner.clone().to_xdr(env)).into();
-        let uri_hash: BytesN<32> = env.crypto().sha256(&Bytes::from(metadata_uri.to_xdr(env))).into();
+        let uri_hash: BytesN<32> = env
+            .crypto()
+            .sha256(&Bytes::from(metadata_uri.to_xdr(env)))
+            .into();
 
         let mut preimage = Bytes::new(env);
         preimage.extend_from_array(&clip_id.to_le_bytes());
@@ -49,7 +53,7 @@ impl MockBackend {
         preimage.append(&Bytes::from(uri_hash));
 
         let message: BytesN<32> = env.crypto().sha256(&preimage).into();
-        
+
         use ed25519_dalek::Signer as _;
         let sig = self.signer_secret.sign(&message.to_array());
         BytesN::from_array(env, &sig.to_bytes())
@@ -93,7 +97,16 @@ fn test_mint_after_metadata_upload() {
         asset_address: None, // XLM
     };
 
-    let token_id = client.mint(&user, &clip_id, &metadata_uri, &None, &None, &royalty, &false, &signature);
+    let token_id = client.mint(
+        &user,
+        &clip_id,
+        &metadata_uri,
+        &None,
+        &None,
+        &royalty,
+        &false,
+        &signature,
+    );
 
     // Verification
     assert_eq!(token_id, 1);
@@ -112,7 +125,9 @@ fn test_royalty_on_secondary_sale() {
 
     // Setup mock payment token (USDC-like)
     let token_admin = Address::generate(&env);
-    let token_address = env.register_stellar_asset_contract_v2(token_admin.clone()).address();
+    let token_address = env
+        .register_stellar_asset_contract_v2(token_admin.clone())
+        .address();
     let token_client = token::TokenClient::new(&env, &token_address);
     let token_admin_client = token::StellarAssetClient::new(&env, &token_address);
 
@@ -135,7 +150,16 @@ fn test_royalty_on_secondary_sale() {
         asset_address: Some(token_address.clone()),
     };
 
-    let token_id = client.mint(&creator, &clip_id, &metadata_uri, &None, &None, &royalty, &false, &signature);
+    let token_id = client.mint(
+        &creator,
+        &clip_id,
+        &metadata_uri,
+        &None,
+        &None,
+        &royalty,
+        &false,
+        &signature,
+    );
 
     // 2. Primary sale: creator -> buyer1 (handled off-chain or via another contract, here we just transfer)
     client.transfer(&creator, &buyer1, &token_id, &0, &None);
@@ -177,13 +201,40 @@ fn test_error_cases() {
 
     // Case 1: Invalid Signature (tampered clip_id)
     let signature = backend.sign_mint(&env, &user, clip_id, &metadata_uri);
-    let result = client.try_mint(&user, &(clip_id + 1), &metadata_uri, &None, &None, &royalty, &false, &signature);
+    let result = client.try_mint(
+        &user,
+        &(clip_id + 1),
+        &metadata_uri,
+        &None,
+        &None,
+        &royalty,
+        &false,
+        &signature,
+    );
     assert!(result.is_err());
     // We can check the exact error if we want, but is_err is usually enough for integration tests
-    
+
     // Case 2: Double Minting the same clip_id
-    client.mint(&user, &clip_id, &metadata_uri, &None, &None, &royalty, &false, &signature);
-    let result = client.try_mint(&user, &clip_id, &metadata_uri, &None, &None, &royalty, &false, &signature);
+    client.mint(
+        &user,
+        &clip_id,
+        &metadata_uri,
+        &None,
+        &None,
+        &royalty,
+        &false,
+        &signature,
+    );
+    let result = client.try_mint(
+        &user,
+        &clip_id,
+        &metadata_uri,
+        &None,
+        &None,
+        &royalty,
+        &false,
+        &signature,
+    );
     assert!(result.is_err());
 
     // Case 3: Unauthorized set_signer

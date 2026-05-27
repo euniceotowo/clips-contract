@@ -3,10 +3,7 @@
 mod test_helpers;
 
 use clips_nft::{ClipsNftContract, ClipsNftContractClient, Error, Royalty, RoyaltyRecipient};
-use soroban_sdk::{
-    testutils::Address as _,
-    token, Address, Env, String, Vec,
-};
+use soroban_sdk::{testutils::Address as _, token, Address, Env, String, Vec};
 use test_helpers::*;
 
 fn royalty_with_asset(env: &Env, recipient: Address, bps: u32, asset: Address) -> Royalty {
@@ -29,8 +26,11 @@ fn test_sep41_pay_royalty_single_recipient() {
     let asset = deploy_token(ctx.env, &buyer, 10_000_000);
 
     let token_id = mint_clip(&ctx, &creator, 501, false);
-    ctx.client
-        .set_royalty(&ctx.admin, &token_id, &royalty_with_asset(ctx.env, creator.clone(), 500, asset.clone()));
+    ctx.client.set_royalty(
+        &ctx.admin,
+        &token_id,
+        &royalty_with_asset(ctx.env, creator.clone(), 500, asset.clone()),
+    );
 
     let sale_price = 2_000_000i128;
     let info = ctx.client.royalty_info(&token_id, &sale_price);
@@ -64,16 +64,9 @@ fn test_sep41_pay_royalty_multi_recipient_split() {
         recipients,
         asset_address: Some(asset.clone()),
     };
-    let token_id = ctx.client.mint(
-        &creator,
-        &502,
-        &uri,
-        &None,
-        &None,
-        &royalty,
-        &false,
-        &sig,
-    );
+    let token_id = ctx
+        .client
+        .mint(&creator, &502, &uri, &None, &None, &royalty, &false, &sig);
 
     let sale_price = 1_000_000i128;
     ctx.client.pay_royalty(&buyer, &token_id, &sale_price);
@@ -130,7 +123,9 @@ fn test_sep41_pay_royalty_xlm_config_fails() {
     let buyer = Address::generate(ctx.env);
     let token_id = mint_clip(&ctx, &creator, 505, false);
 
-    let result = ctx.client.try_pay_royalty(&buyer, &token_id, &1_000_000i128);
+    let result = ctx
+        .client
+        .try_pay_royalty(&buyer, &token_id, &1_000_000i128);
     assert_eq!(result, Err(Ok(Error::InvalidRecipient)));
 }
 
@@ -182,7 +177,13 @@ fn test_transfer_with_royalty_enforcement_custom_asset() {
 
     // Execute transfer with royalty enforcement
     let sale_price = 1_000_000i128;
-    ctx.client.transfer(&seller, &buyer, &token_id, &sale_price, &Some(asset.clone()));
+    ctx.client.transfer(
+        &seller,
+        &buyer,
+        &token_id,
+        &sale_price,
+        &Some(asset.clone()),
+    );
 
     // Verify ownership
     assert_eq!(ctx.client.owner_of(&token_id), buyer);
@@ -221,7 +222,13 @@ fn test_transfer_with_royalty_enforcement_xlm() {
 
     // Execute transfer with royalty enforcement
     let sale_price = 1_000_000i128;
-    ctx.client.transfer(&seller, &buyer, &token_id, &sale_price, &Some(mock_xlm.clone()));
+    ctx.client.transfer(
+        &seller,
+        &buyer,
+        &token_id,
+        &sale_price,
+        &Some(mock_xlm.clone()),
+    );
 
     // Verify ownership
     assert_eq!(ctx.client.owner_of(&token_id), buyer);

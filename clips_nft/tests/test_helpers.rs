@@ -9,7 +9,9 @@
 use clips_nft::{ClipsNftContract, ClipsNftContractClient, Royalty, RoyaltyRecipient, TokenId};
 use soroban_sdk::{
     testutils::{Address as _, BytesN as _},
-    token, Address, Bytes, BytesN, Env, String, Vec, xdr::ToXdr,
+    token,
+    xdr::ToXdr,
+    Address, Bytes, BytesN, Env, String, Vec,
 };
 
 /// Fully initialized test context returned by [`setup`].
@@ -47,7 +49,12 @@ pub fn setup() -> TestContext<'static> {
     let pubkey = BytesN::from_array(env, &keypair.verifying_key().to_bytes());
     client.set_signer(&admin, &pubkey);
 
-    TestContext { env, client, admin, keypair }
+    TestContext {
+        env,
+        client,
+        admin,
+        keypair,
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -62,8 +69,10 @@ pub fn sign_mint(
     metadata_uri: &String,
 ) -> BytesN<64> {
     let owner_hash: BytesN<32> = env.crypto().sha256(&owner.clone().to_xdr(env)).into();
-    let uri_hash: BytesN<32> =
-        env.crypto().sha256(&Bytes::from(metadata_uri.to_xdr(env))).into();
+    let uri_hash: BytesN<32> = env
+        .crypto()
+        .sha256(&Bytes::from(metadata_uri.to_xdr(env)))
+        .into();
 
     let mut preimage = Bytes::new(env);
     preimage.extend_from_array(&clip_id.to_le_bytes());
@@ -91,7 +100,16 @@ pub fn mint_clip(ctx: &TestContext, owner: &Address, clip_id: u32, is_soulbound:
     let uri = String::from_str(ctx.env, &format!("ipfs://QmClip{}", clip_id));
     let sig = sign_mint(ctx.env, &ctx.keypair, owner, clip_id, &uri);
     let royalty = default_royalty(ctx.env, owner.clone());
-    ctx.client.mint(owner, &clip_id, &uri, &None, &None, &royalty, &is_soulbound, &sig)
+    ctx.client.mint(
+        owner,
+        &clip_id,
+        &uri,
+        &None,
+        &None,
+        &royalty,
+        &is_soulbound,
+        &sig,
+    )
 }
 
 // ---------------------------------------------------------------------------
@@ -109,7 +127,10 @@ pub fn set_royalty(ctx: &TestContext, token_id: TokenId, recipient: &Address, ba
         recipient: recipient.clone(),
         basis_points,
     });
-    let royalty = Royalty { recipients, asset_address: None };
+    let royalty = Royalty {
+        recipients,
+        asset_address: None,
+    };
     ctx.client.set_royalty(&ctx.admin, &token_id, &royalty);
 }
 
@@ -145,7 +166,13 @@ pub fn simulate_sale(
     ctx.client.set_royalty(&ctx.admin, &token_id, &updated);
 
     let info = ctx.client.royalty_info(&token_id, &sale_price);
-    ctx.client.transfer(seller, buyer, &token_id, &sale_price, &Some(asset_address.clone()));
+    ctx.client.transfer(
+        seller,
+        buyer,
+        &token_id,
+        &sale_price,
+        &Some(asset_address.clone()),
+    );
 
     info.royalty_amount
 }
@@ -156,8 +183,14 @@ pub fn simulate_sale(
 
 pub fn default_royalty(env: &Env, recipient: Address) -> Royalty {
     let mut recipients = Vec::new(env);
-    recipients.push_back(RoyaltyRecipient { recipient, basis_points: 500 });
-    Royalty { recipients, asset_address: None }
+    recipients.push_back(RoyaltyRecipient {
+        recipient,
+        basis_points: 500,
+    });
+    Royalty {
+        recipients,
+        asset_address: None,
+    }
 }
 
 /// Substring check for Soroban [`String`] values in native tests.
@@ -168,7 +201,9 @@ pub fn string_contains(haystack: &String, needle: &str) -> bool {
 /// Deploy a fresh SEP-0041 token, mint `amount` to `holder`, and return the address.
 pub fn deploy_token(env: &Env, holder: &Address, amount: i128) -> Address {
     let token_admin = Address::generate(env);
-    let addr = env.register_stellar_asset_contract_v2(token_admin.clone()).address();
+    let addr = env
+        .register_stellar_asset_contract_v2(token_admin.clone())
+        .address();
     token::StellarAssetClient::new(env, &addr).mint(holder, &amount);
     addr
 }
