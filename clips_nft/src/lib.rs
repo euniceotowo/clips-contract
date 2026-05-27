@@ -1506,7 +1506,7 @@ impl ClipsNftContract {
         new_uri: String,
     ) -> Result<(), Error> {
         owner.require_auth();
-        let mut data = Self::load_token(&env, token_id)?;
+        let data = Self::load_token(&env, token_id)?;
         if data.owner != owner {
             return Err(Error::Unauthorized);
         }
@@ -3089,7 +3089,7 @@ impl ClipsNftContract {
     }
 
     /// Returns true when `value` begins with the UTF-8 `prefix` bytes.
-    fn url_starts_with(env: &Env, value: &String, prefix: &[u8]) -> bool {
+    fn url_starts_with(_env: &Env, value: &String, prefix: &[u8]) -> bool {
         let bytes = value.to_bytes();
         let prefix_len = prefix.len() as u32;
         if bytes.len() < prefix_len {
@@ -3104,7 +3104,7 @@ impl ClipsNftContract {
     }
 
     /// Append a Soroban [`String`] onto a byte buffer used for JSON assembly.
-    fn append_string_bytes(env: &Env, buffer: &mut Bytes, value: &String) {
+    fn append_string_bytes(_env: &Env, buffer: &mut Bytes, value: &String) {
         let chunk: Bytes = value.to_bytes();
         buffer.append(&chunk);
     }
