@@ -79,3 +79,61 @@ fn safe_royalty_boundary_max_safe_price() {
 fn safe_royalty_boundary_one_stroop_sale() {
     assert_eq!(safe_math::safe_royalty_amount(1, 10_000).unwrap(), 1);
 }
+
+#[test]
+fn safe_royalty_edge_case_very_small_price() {
+    // Test with minimum valid price (1 stroop)
+    assert_eq!(safe_math::safe_royalty_amount(1, 0).unwrap(), 0);
+    assert_eq!(safe_math::safe_royalty_amount(1, 1).unwrap(), 0); // (1*1+5000)/10000 = 0
+    assert_eq!(safe_math::safe_royalty_amount(1, 10_000).unwrap(), 1);
+}
+
+#[test]
+fn safe_royalty_edge_case_very_large_basis_points() {
+    // Test with basis points at u32::MAX (should overflow)
+    let result = safe_math::safe_royalty_amount(1_000, u32::MAX);
+    assert_eq!(result, Err(Error::RoyaltyOverflow));
+}
+
+#[test]
+fn safe_royalty_edge_case_boundary_exact_division() {
+    // Test where (sale_price * basis_points) is exactly divisible by 10_000
+    let sale_price = 10_000;
+    let basis_points = 5_000; // 50%
+    let result = safe_math::safe_royalty_amount(sale_price, basis_points).unwrap();
+    // (10_000 * 5_000 + 5_000) / 10_000 = 50_005_000 / 10_000 = 5_000
+    assert_eq!(result, 5_000);
+}
+
+#[test]
+fn safe_royalty_edge_case_rounding_up() {
+    // Test rounding behavior with values that round up
+    let sale_price = 9_999;
+    let basis_points = 5_000; // 50%
+    let result = safe_math::safe_royalty_amount(sale_price, basis_points).unwrap();
+    // (9_999 * 5_000 + 5_000) / 10_000 = 49_995_000 + 5_000 / 10_000 = 50_000 / 10_000 = 5
+    assert_eq!(result, 5);
+}
+
+#[test]
+fn safe_royalty_edge_case_accumulation_safety() {
+    // Test that repeated calculations don't cause issues
+    let price = 1_000_000_000;
+    for bps in [0, 100, 1000, 5000, 10000] {
+        let result = safe_math::safe_royalty_amount(price, bps);
+        assert!(result.is_ok());
+    }
+}
+
+#[test]
+fn safe_royalty_edge_case_max_basis_points_various_prices() {
+    // Test 100% royalty (10,000 basis points) across various price ranges
+    let prices = [1, 100, 10_000, 1_000_000, i128::MAX / 10_000];
+    for price in prices {
+        let result = safe_math::safe_royalty_amount(price, 10_000);
+        assert!(result.is_ok());
+        // 100% royalty should equal the price (with rounding)
+        let royalty = result.unwrap();
+        assert!(royalty <= price || price == i128::MAX / 10_000);
+    }
+}
