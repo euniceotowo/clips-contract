@@ -175,6 +175,10 @@ pub enum DataKey {
     TokenIndex(u32),
     /// Task 3: per-owner enumeration index
     OwnerTokenIndex(Address, u32),
+    /// Task 1: per-wallet nonce for mint_with_signature replay protection
+    LastMintNonce(Address),
+    /// Task 1: used signature hashes for replay protection
+    UsedSignature(BytesN<32>),
 }
 
 // =============================================================================
@@ -803,6 +807,35 @@ impl ClipsNftContract {
 
     pub fn get_mint_cooldown(env: Env) -> u64 {
         env.storage().instance().get(&DataKey::MintCooldownSeconds).unwrap_or(DEFAULT_MINT_COOLDOWN_SECONDS)
+    }
+
+    // Task 2: alias for set_mint_cooldown
+    pub fn set_mint_cooldown_seconds(env: Env, admin: Address, seconds: u64) -> Result<(), Error> {
+        Self::set_mint_cooldown(env, admin, seconds)
+    }
+
+    // Task 4: revoke a single-token approval
+    pub fn revoke_approval(env: Env, caller: Address, token_id: TokenId) -> Result<(), Error> {
+        caller.require_auth();
+        let data: TokenData = Self::load_token(&env, token_id)?;
+        if data.owner != caller {
+            return Err(Error::Unauthorized);
+        }
+        env.storage().persistent().remove(&DataKey::Approved(token_id));
+        Ok(())
+    }
+
+    // Task 4: revoke all operator approvals for the caller
+    pub fn revoke_all_approvals(env: Env, caller: Address, operator: Address) -> Result<(), Error> {
+        caller.require_auth();
+        env.storage()
+            .persistent()
+            .remove(&DataKey::ApprovalForAll(caller.clone(), operator.clone()));
+        env.events().publish(
+            (symbol_short!("app_all"), caller.clone(), operator.clone()),
+            ApprovalForAllEvent { owner: caller, operator, approved: false },
+        );
+        Ok(())
     }
 
     pub fn blacklist_clip(env: Env, admin: Address, clip_id: u32) -> Result<(), Error> {
