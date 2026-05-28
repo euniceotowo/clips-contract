@@ -1,8 +1,10 @@
 #![cfg(test)]
 
+mod test_helpers;
+
 use clips_nft::{ClipsNftContract, ClipsNftContractClient, Royalty, RoyaltyRecipient};
 use soroban_sdk::{
-    testutils::{Address as _, BytesN as _},
+    testutils::{Address as _, BytesN as _, Ledger as _},
     Address, Bytes, BytesN, Env, String, Vec, xdr::ToXdr,
     token,
 };
@@ -91,7 +93,7 @@ fn test_mint_after_metadata_upload() {
         asset_address: None, // XLM
     };
 
-    let token_id = client.mint(&user, &clip_id, &metadata_uri, &royalty, &false, &0u32, &signature);
+    let token_id = client.mint(&user, &clip_id, &metadata_uri, &None, &None, &royalty, &false, &signature);
 
     // Verification
     assert_eq!(token_id, 1);
@@ -133,10 +135,10 @@ fn test_royalty_on_secondary_sale() {
         asset_address: Some(token_address.clone()),
     };
 
-    let token_id = client.mint(&creator, &clip_id, &metadata_uri, &royalty, &false, &0u32, &signature);
+    let token_id = client.mint(&creator, &clip_id, &metadata_uri, &None, &None, &royalty, &false, &signature);
 
     // 2. Primary sale: creator -> buyer1 (handled off-chain or via another contract, here we just transfer)
-    client.transfer(&creator, &buyer1, &token_id);
+    client.transfer(&creator, &buyer1, &token_id, &0, &None);
     assert_eq!(client.owner_of(&token_id), buyer1);
 
     // 3. Secondary sale: buyer1 -> buyer2
@@ -151,7 +153,7 @@ fn test_royalty_on_secondary_sale() {
     assert_eq!(token_client.balance(&buyer1), 1000 - 60);
 
     // Complete the transfer
-    client.transfer(&buyer1, &buyer2, &token_id);
+    client.transfer(&buyer1, &buyer2, &token_id, &0, &None);
     assert_eq!(client.owner_of(&token_id), buyer2);
 }
 
@@ -175,13 +177,13 @@ fn test_error_cases() {
 
     // Case 1: Invalid Signature (tampered clip_id)
     let signature = backend.sign_mint(&env, &user, clip_id, &metadata_uri);
-    let result = client.try_mint(&user, &(clip_id + 1), &metadata_uri, &royalty, &false, &0u32, &signature);
+    let result = client.try_mint(&user, &(clip_id + 1), &metadata_uri, &None, &None, &royalty, &false, &signature);
     assert!(result.is_err());
     // We can check the exact error if we want, but is_err is usually enough for integration tests
     
     // Case 2: Double Minting the same clip_id
-    client.mint(&user, &clip_id, &metadata_uri, &royalty, &false, &0u32, &signature);
-    let result = client.try_mint(&user, &clip_id, &metadata_uri, &royalty, &false, &0u32, &signature);
+    client.mint(&user, &clip_id, &metadata_uri, &None, &None, &royalty, &false, &signature);
+    let result = client.try_mint(&user, &clip_id, &metadata_uri, &None, &None, &royalty, &false, &signature);
     assert!(result.is_err());
 
     // Case 3: Unauthorized set_signer
@@ -189,12 +191,26 @@ fn test_error_cases() {
     let result = client.try_set_signer(&malicious, &backend.public_key(&env));
     assert!(result.is_err());
 
-    // Case 4: Transfer while paused
+    // Case 4: Transfer while paused (after 24h timelock elapses)
     let token_id = 1;
     client.pause(&admin);
-    let result = client.try_transfer(&user, &malicious, &token_id);
+    env.ledger().with_mut(|l| l.timestamp += 86_400 + 1);
+    let result = client.try_transfer(&user, &malicious, &token_id, &0, &None);
     assert!(result.is_err());
-    // Advance ledger past timelock so the contract can be unpaused in future tests
-    use soroban_sdk::testutils::Ledger as _;
-    env.ledger().set_sequence_number(env.ledger().sequence() + clips_nft::PAUSE_TIMELOCK_LEDGERS);
+
+    // Case 5: Signature for wrong owner is rejected
+    client.unpause(&admin);
+    let other_user = Address::generate(&env);
+    let sig_for_other = backend.sign_mint(&env, &other_user, 304, &metadata_uri);
+    let result = client.try_mint(
+        &user,
+        &304u32,
+        &metadata_uri,
+        &None,
+        &None,
+        &royalty,
+        &false,
+        &sig_for_other,
+    );
+    assert!(result.is_err());
 }

@@ -38,7 +38,7 @@
                   "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM"
                 },
                 {
-                  "bytes": "5c2351d2faf2c391e8b775bf065d694dfc0de60d5697772fa8b37107f6882877"
+                  "bytes": "2acbbdc1aa2c1141e026b0d923e73e7d82019b749d6a85fafa427c77556e20d2"
                 }
               ]
             }
@@ -65,6 +65,8 @@
                 {
                   "string": "ipfs://QmVideoClip12345"
                 },
+                "void",
+                "void",
                 {
                   "map": [
                     {
@@ -108,10 +110,7 @@
                   "bool": false
                 },
                 {
-                  "u32": 0
-                },
-                {
-                  "bytes": "5f9ccb60de6a5c9bd68eadf633c0470237ad008d1b74da9d09dd6d8a2fcdf8fdf9acdbd500796a0b52c366cc3fefbf9092b013ce7a98550a694c8f2ae455d904"
+                  "bytes": "2a0b7e81055220d46fdeb34007f34348d37cb585b37cb2e0545692963ffaf98dd55f3e2bbd0689b2803099a41da4d5330364bf2086c828740fcba486ed44ec0e"
                 }
               ]
             }
@@ -172,6 +171,7 @@
     ],
     [],
     [],
+    [],
     [
       [
         "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM",
@@ -221,8 +221,8 @@
   ],
   "ledger": {
     "protocol_version": 25,
-    "sequence_number": 17280,
-    "timestamp": 0,
+    "sequence_number": 0,
+    "timestamp": 86401,
     "network_id": "0000000000000000000000000000000000000000000000000000000000000000",
     "base_reserve": 0,
     "min_persistent_entry_ttl": 4096,
@@ -307,7 +307,7 @@
           },
           "ext": "v0"
         },
-        "live_until": 6329279
+        "live_until": 6311999
       },
       {
         "entry": {
@@ -359,10 +359,10 @@
               "key": {
                 "vec": [
                   {
-                    "symbol": "ClipIdMinted"
+                    "symbol": "Balance"
                   },
                   {
-                    "u32": 12345
+                    "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4"
                   }
                 ]
               },
@@ -386,16 +386,70 @@
               "key": {
                 "vec": [
                   {
-                    "symbol": "CollectionCount"
+                    "symbol": "Balance"
                   },
                   {
-                    "u32": 0
+                    "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAITA4"
+                  }
+                ]
+              },
+              "durability": "persistent",
+              "val": {
+                "u32": 0
+              }
+            }
+          },
+          "ext": "v0"
+        },
+        "live_until": 4095
+      },
+      {
+        "entry": {
+          "last_modified_ledger_seq": 0,
+          "data": {
+            "contract_data": {
+              "ext": "v0",
+              "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHK3M",
+              "key": {
+                "vec": [
+                  {
+                    "symbol": "ClipIdMinted"
+                  },
+                  {
+                    "u32": 12345
                   }
                 ]
               },
               "durability": "persistent",
               "val": {
                 "u32": 1
+              }
+            }
+          },
+          "ext": "v0"
+        },
+        "live_until": 535680
+      },
+      {
+        "entry": {
+          "last_modified_ledger_seq": 0,
+          "data": {
+            "contract_data": {
+              "ext": "v0",
+              "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHK3M",
+              "key": {
+                "vec": [
+                  {
+                    "symbol": "LastMintTimestamp"
+                  },
+                  {
+                    "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4"
+                  }
+                ]
+              },
+              "durability": "persistent",
+              "val": {
+                "u64": "0"
               }
             }
           },
@@ -425,6 +479,20 @@
                 "map": [
                   {
                     "key": {
+                      "symbol": "animation_url"
+                    },
+                    "val": "void"
+                  },
+                  {
+                    "key": {
+                      "symbol": "attributes"
+                    },
+                    "val": {
+                      "vec": []
+                    }
+                  },
+                  {
+                    "key": {
                       "symbol": "clip_id"
                     },
                     "val": {
@@ -433,11 +501,21 @@
                   },
                   {
                     "key": {
-                      "symbol": "collection_id"
+                      "symbol": "description"
                     },
-                    "val": {
-                      "u32": 0
-                    }
+                    "val": "void"
+                  },
+                  {
+                    "key": {
+                      "symbol": "external_url"
+                    },
+                    "val": "void"
+                  },
+                  {
+                    "key": {
+                      "symbol": "image"
+                    },
+                    "val": "void"
                   },
                   {
                     "key": {
@@ -533,7 +611,7 @@
           },
           "ext": "v0"
         },
-        "live_until": 21375
+        "live_until": 535680
       },
       {
         "entry": {
@@ -566,24 +644,120 @@
                       "key": {
                         "vec": [
                           {
-                            "symbol": "NextTokenId"
+                            "symbol": "CircuitBreakerEnabled"
                           }
                         ]
                       },
                       "val": {
-                        "u32": 2
+                        "bool": false
                       }
                     },
                     {
                       "key": {
                         "vec": [
                           {
-                            "symbol": "PauseRequestedAt"
+                            "symbol": "CircuitBreakerThreshold"
                           }
                         ]
                       },
                       "val": {
-                        "u32": 0
+                        "u64": "100"
+                      }
+                    },
+                    {
+                      "key": {
+                        "vec": [
+                          {
+                            "symbol": "CircuitBreakerWindowCount"
+                          }
+                        ]
+                      },
+                      "val": {
+                        "u64": "0"
+                      }
+                    },
+                    {
+                      "key": {
+                        "vec": [
+                          {
+                            "symbol": "CircuitBreakerWindowSeconds"
+                          }
+                        ]
+                      },
+                      "val": {
+                        "u64": "60"
+                      }
+                    },
+                    {
+                      "key": {
+                        "vec": [
+                          {
+                            "symbol": "CircuitBreakerWindowStart"
+                          }
+                        ]
+                      },
+                      "val": {
+                        "u64": "0"
+                      }
+                    },
+                    {
+                      "key": {
+                        "vec": [
+                          {
+                            "symbol": "CountMint"
+                          }
+                        ]
+                      },
+                      "val": {
+                        "u64": "1"
+                      }
+                    },
+                    {
+                      "key": {
+                        "vec": [
+                          {
+                            "symbol": "CountTransfer"
+                          }
+                        ]
+                      },
+                      "val": {
+                        "u64": "2"
+                      }
+                    },
+                    {
+                      "key": {
+                        "vec": [
+                          {
+                            "symbol": "MintCooldownSeconds"
+                          }
+                        ]
+                      },
+                      "val": {
+                        "u64": "0"
+                      }
+                    },
+                    {
+                      "key": {
+                        "vec": [
+                          {
+                            "symbol": "Name"
+                          }
+                        ]
+                      },
+                      "val": {
+                        "string": "ClipCash Clips"
+                      }
+                    },
+                    {
+                      "key": {
+                        "vec": [
+                          {
+                            "symbol": "NextTokenId"
+                          }
+                        ]
+                      },
+                      "val": {
+                        "u32": 2
                       }
                     },
                     {
@@ -619,7 +793,55 @@
                         ]
                       },
                       "val": {
-                        "bytes": "5c2351d2faf2c391e8b775bf065d694dfc0de60d5697772fa8b37107f6882877"
+                        "bytes": "2acbbdc1aa2c1141e026b0d923e73e7d82019b749d6a85fafa427c77556e20d2"
+                      }
+                    },
+                    {
+                      "key": {
+                        "vec": [
+                          {
+                            "symbol": "Symbol"
+                          }
+                        ]
+                      },
+                      "val": {
+                        "string": "CLIP"
+                      }
+                    },
+                    {
+                      "key": {
+                        "vec": [
+                          {
+                            "symbol": "TotalGasMint"
+                          }
+                        ]
+                      },
+                      "val": {
+                        "u64": "50000"
+                      }
+                    },
+                    {
+                      "key": {
+                        "vec": [
+                          {
+                            "symbol": "TotalGasTransfer"
+                          }
+                        ]
+                      },
+                      "val": {
+                        "u64": "60000"
+                      }
+                    },
+                    {
+                      "key": {
+                        "vec": [
+                          {
+                            "symbol": "TotalSupply"
+                          }
+                        ]
+                      },
+                      "val": {
+                        "u32": 1
                       }
                     }
                   ]
@@ -629,7 +851,7 @@
           },
           "ext": "v0"
         },
-        "live_until": 21375
+        "live_until": 4095
       },
       {
         "entry": {
@@ -649,7 +871,7 @@
           },
           "ext": "v0"
         },
-        "live_until": 6329279
+        "live_until": 6311999
       },
       {
         "entry": {
