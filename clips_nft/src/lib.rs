@@ -943,6 +943,21 @@ impl ClipsNftContract {
         Ok(())
     }
 
+    /// Lift a freeze on a token, re-enabling transfers.
+    ///
+    /// Only the admin may unfreeze. No-op if the token is not currently frozen.
+    ///
+    /// Emits: `"unfreeze"` [`TokenUnfrozenEvent`].
+    pub fn unfreeze_token(env: Env, admin: Address, token_id: TokenId) -> Result<(), Error> {
+        Self::require_admin(&env, &admin)?;
+        if !env.storage().persistent().has(&DataKey::Token(token_id)) {
+            return Err(Error::InvalidTokenId);
+        }
+        env.storage().persistent().remove(&DataKey::Frozen(token_id));
+        env.events().publish((symbol_short!("unfreeze"), token_id), TokenUnfrozenEvent { token_id });
+        Ok(())
+    }
+
     /// Mint using a backend-provided signature instead of a wallet-signed tx.
     ///
     /// This entrypoint does NOT require the recipient to `require_auth()`.
@@ -1926,6 +1941,88 @@ impl ClipsNftContract {
                 from: owner.clone(),
                 to: env.current_contract_address(),
             },
+        );
+
+        Ok(())
+    }
+
+    /// Burn an NFT and optionally refund unclaimed royalties to the primary royalty recipient.
+    ///
+    /// When `claim_royalty = true` and the token has a positive `RoyaltyBalance` with a
+    /// configured SEP-0041 asset, the balance is transferred to the primary recipient before
+    /// the token is destroyed. This follows check-effects-interactions: the balance is cleared
+    /// in storage *before* the external token transfer.
+    ///
+    /// Emits: `"refunded"` [`RefundedEvent`] when royalties are paid out, then `"burn"` [`BurnEvent`].
+    ///
+    /// # Arguments
+    /// * `owner`         — Current owner (must authorize).
+    /// * `token_id`      — Token to destroy.
+    /// * `claim_royalty` — When `true`, refund any accrued royalty balance before burning.
+    ///
+    /// # Errors
+    /// * [`Error::TokenFrozen`]   — token is frozen.
+    /// * [`Error::Unauthorized`]  — caller is not the owner.
+    /// * [`Error::InvalidTokenId`] — token does not exist.
+    pub fn burn_with_refund(env: Env, owner: Address, token_id: TokenId, claim_royalty: bool) -> Result<(), Error> {
+        owner.require_auth();
+
+        if Self::is_frozen(env.clone(), token_id) {
+            return Err(Error::TokenFrozen);
+        }
+
+        let data: TokenData = Self::load_token(&env, token_id)?;
+        if owner != data.owner {
+            return Err(Error::Unauthorized);
+        }
+
+        // Optionally refund unclaimed royalties before destroying storage.
+        if claim_royalty {
+            let royalty_balance: i128 = env
+                .storage()
+                .persistent()
+                .get(&DataKey::RoyaltyBalance(token_id))
+                .unwrap_or(0);
+
+            if royalty_balance > 0 {
+                if let Some(ref asset_address) = data.royalty.asset_address {
+                    if let Some(primary) = data.royalty.recipients.get(0) {
+                        // Clear balance before external transfer (CEI pattern).
+                        env.storage().persistent().remove(&DataKey::RoyaltyBalance(token_id));
+                        Self::acquire_reentrancy_lock(&env)?;
+                        soroban_sdk::token::TokenClient::new(&env, asset_address)
+                            .transfer(&env.current_contract_address(), &primary.recipient, &royalty_balance);
+                        Self::release_reentrancy_lock(&env);
+                        env.events().publish(
+                            (symbol_short!("refunded"),),
+                            RefundedEvent {
+                                token_id,
+                                recipient: primary.recipient.clone(),
+                                amount: royalty_balance,
+                            },
+                        );
+                    }
+                }
+            }
+        }
+
+        // Destroy token storage.
+        env.storage().persistent().remove(&DataKey::Token(token_id));
+        env.storage().persistent().remove(&DataKey::ClipIdMinted(data.clip_id));
+        env.storage().persistent().remove(&DataKey::RoyaltyBalance(token_id));
+
+        let total_supply: u32 = env.storage().instance().get(&DataKey::TotalSupply).unwrap_or(0);
+        env.storage().instance().set(&DataKey::TotalSupply, &total_supply.saturating_sub(1));
+
+        let bal: u32 = env.storage().persistent().get(&DataKey::Balance(owner.clone())).unwrap_or(0);
+        env.storage().persistent().set(&DataKey::Balance(owner.clone()), &bal.saturating_sub(1));
+
+        Self::index_remove_global(&env, token_id, total_supply);
+        Self::index_remove_owner(&env, &owner, token_id);
+
+        env.events().publish(
+            (symbol_short!("burn"),),
+            BurnEvent { owner, token_id, clip_id: data.clip_id },
         );
 
         Ok(())
@@ -4522,5 +4619,126 @@ mod tests {
         client.refresh_metadata(&admin, &tid, &Some(String::from_str(&env, "ipfs://v2")), &None, &None);
         env.ledger().with_mut(|l| l.timestamp += 29 * 24 * 3600);
         assert_eq!(client.try_refresh_metadata(&admin, &tid, &Some(String::from_str(&env, "ipfs://v3")), &None, &None), Err(Ok(Error::MetadataRefreshTooSoon)));
+    }
+
+    // -------------------------------------------------------------------------
+    // #294: freeze / unfreeze individual NFTs
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn test_freeze_blocks_transfer() {
+        let (env, admin, user1, user2) = setup();
+        let cid = env.register(ClipsNftContract, ());
+        let client = ClipsNftContractClient::new(&env, &cid);
+        client.init(&admin);
+        let sk = register_signer(&env, &client, &admin);
+        let tid = do_mint(&client, &env, &user1, 1100, &sk);
+        client.freeze_token(&admin, &tid);
+        assert!(client.is_frozen(&tid));
+        assert_eq!(
+            client.try_transfer(&user1, &user2, &tid, &0i128, &None),
+            Err(Ok(Error::TokenFrozen))
+        );
+    }
+
+    #[test]
+    fn test_unfreeze_restores_transfer() {
+        let (env, admin, user1, user2) = setup();
+        let cid = env.register(ClipsNftContract, ());
+        let client = ClipsNftContractClient::new(&env, &cid);
+        client.init(&admin);
+        let sk = register_signer(&env, &client, &admin);
+        let tid = do_mint(&client, &env, &user1, 1101, &sk);
+        client.freeze_token(&admin, &tid);
+        client.unfreeze_token(&admin, &tid);
+        assert!(!client.is_frozen(&tid));
+        client.transfer(&user1, &user2, &tid, &0i128, &None);
+        assert_eq!(client.owner_of(&tid), user2);
+    }
+
+    #[test]
+    fn test_unfreeze_non_admin_fails() {
+        let (env, admin, user1, _) = setup();
+        let cid = env.register(ClipsNftContract, ());
+        let client = ClipsNftContractClient::new(&env, &cid);
+        client.init(&admin);
+        let sk = register_signer(&env, &client, &admin);
+        let tid = do_mint(&client, &env, &user1, 1102, &sk);
+        client.freeze_token(&admin, &tid);
+        assert_eq!(
+            client.try_unfreeze_token(&user1, &tid),
+            Err(Ok(Error::Unauthorized))
+        );
+    }
+
+    #[test]
+    fn test_freeze_invalid_token_fails() {
+        let (env, admin, _, _) = setup();
+        let cid = env.register(ClipsNftContract, ());
+        let client = ClipsNftContractClient::new(&env, &cid);
+        client.init(&admin);
+        assert_eq!(
+            client.try_freeze_token(&admin, &9999u32),
+            Err(Ok(Error::InvalidTokenId))
+        );
+    }
+
+    // -------------------------------------------------------------------------
+    // #297: burn_with_refund
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn test_burn_with_refund_no_royalty_balance() {
+        let (env, admin, user1, _) = setup();
+        let cid = env.register(ClipsNftContract, ());
+        let client = ClipsNftContractClient::new(&env, &cid);
+        client.init(&admin);
+        let sk = register_signer(&env, &client, &admin);
+        let tid = do_mint(&client, &env, &user1, 1200, &sk);
+        // claim_royalty=true but no royalty balance — should still burn cleanly
+        client.burn_with_refund(&user1, &tid, &true);
+        assert!(!client.exists(&tid));
+        assert_eq!(client.total_supply(), 0);
+    }
+
+    #[test]
+    fn test_burn_with_refund_false_skips_refund() {
+        let (env, admin, user1, _) = setup();
+        let cid = env.register(ClipsNftContract, ());
+        let client = ClipsNftContractClient::new(&env, &cid);
+        client.init(&admin);
+        let sk = register_signer(&env, &client, &admin);
+        let tid = do_mint(&client, &env, &user1, 1201, &sk);
+        client.burn_with_refund(&user1, &tid, &false);
+        assert!(!client.exists(&tid));
+    }
+
+    #[test]
+    fn test_burn_with_refund_frozen_fails() {
+        let (env, admin, user1, _) = setup();
+        let cid = env.register(ClipsNftContract, ());
+        let client = ClipsNftContractClient::new(&env, &cid);
+        client.init(&admin);
+        let sk = register_signer(&env, &client, &admin);
+        let tid = do_mint(&client, &env, &user1, 1202, &sk);
+        client.freeze_token(&admin, &tid);
+        assert_eq!(
+            client.try_burn_with_refund(&user1, &tid, &true),
+            Err(Ok(Error::TokenFrozen))
+        );
+    }
+
+    #[test]
+    fn test_burn_with_refund_non_owner_fails() {
+        let (env, admin, user1, user2) = setup();
+        let cid = env.register(ClipsNftContract, ());
+        let client = ClipsNftContractClient::new(&env, &cid);
+        client.init(&admin);
+        let sk = register_signer(&env, &client, &admin);
+        let tid = do_mint(&client, &env, &user1, 1203, &sk);
+        assert_eq!(
+            client.try_burn_with_refund(&user2, &tid, &false),
+            Err(Ok(Error::Unauthorized))
+        );
     }
 }
